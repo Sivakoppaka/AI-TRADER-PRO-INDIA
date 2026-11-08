@@ -1,0 +1,110 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+
+st.set_page_config(
+    page_title="AI Trader Pro India",
+    layout="wide"
+)
+
+st.title("📈 AI TRADER PRO INDIA")
+st.subheader("Indian Stock Market Analysis System")
+
+st.sidebar.header("Stock Data")
+
+uploaded_file = st.sidebar.file_uploader(
+    "Upload NSE Historical CSV",
+    type=["csv"]
+)
+
+if uploaded_file:
+
+    df = pd.read_csv(uploaded_file)
+
+    df.columns = df.columns.str.strip().str.title()
+
+    required = ["Open", "High", "Low", "Close", "Volume"]
+
+    if not all(col in df.columns for col in required):
+        st.error("CSV must contain Open, High, Low, Close, Volume")
+        st.stop()
+
+    for col in required:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df = df.dropna(subset=required)
+
+    if df.empty:
+        st.error("No valid market data found.")
+        st.stop()
+
+    df["EMA20"] = df["Close"].ewm(span=20).mean()
+    df["EMA50"] = df["Close"].ewm(span=50).mean()
+
+    df["VWAP"] = (
+        ((df["High"] + df["Low"] + df["Close"]) / 3)
+        * df["Volume"]
+    ).cumsum() / df["Volume"].cumsum().replace(0, np.nan)
+
+    latest = df.iloc[-1]
+
+    st.success("Stock Data Loaded Successfully!")
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Latest Close", round(latest["Close"], 2))
+    col2.metric("EMA 20", round(latest["EMA20"], 2))
+    col3.metric("EMA 50", round(latest["EMA50"], 2))
+
+    st.subheader("Price Analysis")
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        y=df["Close"],
+        name="Close Price"
+    ))
+
+    fig.add_trace(go.Scatter(
+        y=df["EMA20"],
+        name="EMA 20"
+    ))
+
+    fig.add_trace(go.Scatter(
+        y=df["EMA50"],
+        name="EMA 50"
+    ))
+
+    fig.add_trace(go.Scatter(
+        y=df["VWAP"],
+        name="VWAP"
+    ))
+
+    fig.update_layout(
+        height=500,
+        xaxis_title="Trading Sessions",
+        yaxis_title="Price",
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.subheader("Trading Trend")
+
+    if latest["Close"] > latest["EMA20"] > latest["EMA50"]:
+        st.success("Bullish Trend")
+    elif latest["Close"] < latest["EMA20"] < latest["EMA50"]:
+        st.error("Bearish Trend")
+    else:
+        st.warning("Sideways / Mixed Trend")
+
+    st.subheader("Historical Data")
+
+    st.dataframe(df.tail(30), use_container_width=True)
+
+else:
+    st.info("Upload an NSE Historical CSV file to begin analysis.")
+
+    st.write("Required columns:")
+    st.write("Date, Open, High, Low, Close, Volume")
